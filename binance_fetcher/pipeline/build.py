@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import multiprocessing
 import os
 import time
 from collections.abc import Iterator
@@ -153,7 +154,11 @@ class _Pool:
 
     def get(self) -> Executor:
         if self._executor is None:
-            self._executor = ProcessPoolExecutor(self.workers)
+            # Spawned, not forked: polars runs a thread pool in the parent, and a
+            # forked child inherits its locks mid-state and deadlocks on Linux.
+            self._executor = ProcessPoolExecutor(
+                self.workers, mp_context=multiprocessing.get_context("spawn")
+            )
         return self._executor
 
     def close(self) -> None:
