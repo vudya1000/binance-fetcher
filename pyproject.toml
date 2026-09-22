@@ -1,0 +1,59 @@
+[project]
+name = "binance-fetcher"
+version = "1.0.0"
+description = "Async, rate-limited Binance USD-M Futures market-data pipeline: raw archives and REST responses in, monthly Parquet out"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+keywords = ["binance", "futures", "market-data", "parquet", "polars", "asyncio"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX",
+    "Topic :: Office/Business :: Financial",
+]
+dependencies = [
+    "aiohttp>=3.9,<4",
+    "tenacity>=8.2,<10",
+    "polars>=1.30,<2",
+    "duckdb>=1.0,<2",
+    "click>=8.1,<9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.5",
+    "mypy>=1.10",
+]
+
+[project.scripts]
+binance-fetcher = "binance_fetcher.cli:cli"
+
+[tool.setuptools.packages.find]
+include = ["binance_fetcher*"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

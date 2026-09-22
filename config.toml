@@ -1,0 +1,22 @@
+# Every key can also be set as FETCHER_<KEY> in the environment, e.g. FETCHER_DATA_DIR.
+
+[general]
+data_dir = "./data"
+log_level = "INFO"
+
+[binance]
+base_url = "https://fapi.binance.com"
+vision_base_url = "https://data.binance.vision"
+
+[backfill]
+start_month = "2023-01"
+download_workers = 6  # concurrent Vision downloads (override per run with --workers)
+include_mark_price = true
+include_premium_index = true
+
+[rate_limit]
+# Budgets per Binance limit pool, each below the per-IP server limit.
+max_concurrent = 15
+weight_per_minute = 2000      # /fapi/v1 request weight (server: 2400/min)
+futures_data_per_5min = 900   # /futures/data/* requests (server: 1000/5min)
+funding_per_5min = 450        # fundingRate + fundingInfo (server: 500/5min, shared)
