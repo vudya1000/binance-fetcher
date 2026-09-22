@@ -73,6 +73,79 @@ key can also be set through the environment as `FETCHER_<KEY>`, for example
 `FETCHER_DATA_DIR` or `FETCHER_WEIGHT_PER_MINUTE`; an unknown key in the file
 is an error.
 
+## What the data looks like
+
+One month of two symbols, fetched from Vision and built, takes about fifteen
+seconds:
+
+```console
+$ binance-fetcher backfill --symbols BTCUSDT,ETHUSDT --start 2024-05 --end 2024-05
+  ohlcv                  2 symbols, 2 archives (+0 missing, 0 unchanged), 0 failed
+  mark_price             2 symbols, 2 archives (+0 missing, 0 unchanged), 0 failed
+  premium_index_klines   2 symbols, 2 archives (+0 missing, 0 unchanged), 0 failed
+  funding                2 symbols, 2 archives (+0 missing, 0 unchanged), 0 failed
+  open_interest          2 symbols, 62 archives (+0 missing, 0 unchanged), 0 failed
+Backfill done in 14s
+$ binance-fetcher build
+  ohlcv                  1 months built (1,488 rows), 0 unchanged, 0 REST files folded
+  mark_price             1 months built (1,488 rows), 0 unchanged, 0 REST files folded
+  premium_index_klines   1 months built (1,488 rows), 0 unchanged, 0 REST files folded
+  funding                1 months built (186 rows), 0 unchanged, 0 REST files folded
+  open_interest          1 months built (1,488 rows), 0 unchanged, 0 REST files folded
+Build done in 0.1s
+$ binance-fetcher validate --daily
+All 2 symbols passed validation
+```
+
+The raw store holds the archives as Vision served them, with their published
+checksums; the 62 daily open-interest files are packed into one ZIP per
+symbol and month. The Parquet store holds one partition per family and month:
+
+```
+data/raw/vision/klines/BTCUSDT/BTCUSDT-1h-2024-05.zip            (+ .CHECKSUM)
+data/raw/vision/fundingRate/BTCUSDT/BTCUSDT-fundingRate-2024-05.zip
+data/raw/vision/metrics/BTCUSDT/BTCUSDT-metrics-2024-05.zip     (31 daily CSV members)
+...
+data/parquet/ohlcv/2024-05.parquet
+data/parquet/mark_price/2024-05.parquet
+data/parquet/premium_index_klines/2024-05.parquet
+data/parquet/funding/2024-05.parquet
+data/parquet/open_interest/2024-05.parquet
+```
+
+Every partition is plain Parquet, so anything that reads Parquet can use it.
+Times are epoch milliseconds, UTC:
+
+```console
+$ binance-fetcher query "SELECT symbol, epoch_ms(open_time) AS open_time, open, high, low, close, volume
+    FROM 'data/parquet/ohlcv/*.parquet' WHERE symbol = 'BTCUSDT' ORDER BY open_time LIMIT 3"
+┌─────────┬─────────────────────┬─────────┬─────────┬─────────┬─────────┬───────────┐
+│ symbol  │      open_time      │  open   │  high   │   low   │  close  │  volume   │
+├─────────┼─────────────────────┼─────────┼─────────┼─────────┼─────────┼───────────┤
+│ BTCUSDT │ 2024-05-01 00:00:00 │ 60651.2 │ 60816.7 │ 60060.6 │ 60217.2 │ 10900.384 │
+│ BTCUSDT │ 2024-05-01 01:00:00 │ 60217.3 │ 60389.0 │ 59833.0 │ 60110.6 │ 11290.556 │
+│ BTCUSDT │ 2024-05-01 02:00:00 │ 60110.6 │ 60159.2 │ 59555.0 │ 59902.4 │ 13309.707 │
+└─────────┴─────────────────────┴─────────┴─────────┴─────────┴─────────┴───────────┘
+```
+
+The families share the `(symbol, time)` key, so they join on the hour:
+
+```console
+$ binance-fetcher query "SELECT o.symbol, epoch_ms(o.open_time) AS hour, o.close, m.close AS mark_close,
+    oi.sum_open_interest AS open_interest
+    FROM 'data/parquet/ohlcv/*.parquet' o
+    JOIN 'data/parquet/mark_price/*.parquet' m USING (symbol, open_time)
+    JOIN 'data/parquet/open_interest/*.parquet' oi ON oi.symbol = o.symbol AND oi.timestamp = o.open_time
+    WHERE o.symbol = 'ETHUSDT' ORDER BY hour DESC LIMIT 3"
+┌─────────┬─────────────────────┬─────────┬───────────────┬───────────────┐
+│ symbol  │        hour         │  close  │  mark_close   │ open_interest │
+├─────────┼─────────────────────┼─────────┼───────────────┼───────────────┤
+│ ETHUSDT │ 2024-05-31 23:00:00 │ 3764.35 │ 3763.91341667 │   1132153.909 │
+│ ETHUSDT │ 2024-05-31 22:00:00 │  3772.9 │ 3772.04628947 │   1130008.103 │
+│ ETHUSDT │ 2024-05-31 21:00:00 │ 3788.01 │ 3787.75935606 │   1132887.612 │
+└─────────┴─────────────────────┴─────────┴───────────────┴───────────────┘
+```
+
 ## Commands
 
 The entry point is `binance-fetcher` (or `python -m binance_fetcher`). Every
